@@ -9,10 +9,19 @@ publish = false
 name = "noot-settings"
 path = "src/bin/noot-settings.rs"
 
+[[bin]]
+name = "nootd"
+path = "src/bin/nootd.rs"
+
 [dependencies]
 anyhow = "1"
 eframe = "0.37"
+evdev = "0.13"
+fastrand = "2"
 image = { version = "0.25", default-features = false, features = ["png"] }
+rodio = { version = "0.23", default-features = false, features = ["playback", "wav"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
 googletest = "0.14"

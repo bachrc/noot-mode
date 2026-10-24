@@ -15,7 +15,9 @@ icon_dir="${HOME}/.local/share/icons/hicolor/256x256/apps"
 cargo build --release --locked --target-dir "${root}/target" --manifest-path "${root}/Cargo.toml"
 
 install -Dm755 "${root}/target/release/noot-settings" "${bin_dir}/noot-settings"
-install -Dm644 "${root}/packaging/nootd.service" "${unit_dir}/nootd.service"
+install -Dm755 "${root}/target/release/nootd" "${bin_dir}/nootd"
+mkdir -p "${unit_dir}"
+sed "s|@EXEC@|${bin_dir}/nootd|" "${root}/packaging/nootd.service" > "${unit_dir}/nootd.service"
 install -Dm644 "${root}/assets/noot-on.png" "${icon_dir}/noot.png"
 
 mkdir -p "${app_dir}"

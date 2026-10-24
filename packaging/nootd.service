@@ -1,10 +1,13 @@
 [Unit]
-Description=Noot mode (service factice)
+Description=Noot mode
+After=pipewire.service
+Wants=pipewire.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/sleep infinity
-Restart=no
+ExecStart=@EXEC@
+Restart=on-failure
+RestartSec=2
 
 [Install]
 WantedBy=default.target

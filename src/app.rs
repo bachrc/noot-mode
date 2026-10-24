@@ -3,13 +3,18 @@ use std::time::{Duration, Instant};
 use anyhow::{Result, anyhow};
 use eframe::egui::{self, Color32, ColorImage, TextureHandle, TextureOptions, ViewportCommand};
 
+use crate::input_check::{self, InputStatus};
 use crate::service::ServiceCli;
 
 const TEXTURE_ON: &[u8] = include_bytes!("../assets/noot-on.png");
 const TEXTURE_OFF: &[u8] = include_bytes!("../assets/noot-off.png");
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
 const BACKGROUND: Color32 = Color32::from_rgb(0x14, 0x14, 0x1a);
-const ERROR: Color32 = Color32::from_rgb(0xff, 0x6b, 0x6b);
+const ERROR_BAND: Color32 = Color32::from_rgb(0x2a, 0x0f, 0x12);
+const ERROR_TEXT: Color32 = Color32::from_rgb(0xff, 0x6b, 0x6b);
+const WARNING_BAND: Color32 = Color32::from_rgb(0x2a, 0x1f, 0x0a);
+const WARNING_TEXT: Color32 = Color32::from_rgb(0xf5, 0xa6, 0x23);
+const BAND_HEIGHT: f32 = 28.0;
 
 pub struct SettingsApp {
     service: ServiceCli,
@@ -18,12 +23,14 @@ pub struct SettingsApp {
     on: TextureHandle,
     off: TextureHandle,
     error: Option<String>,
+    input_status: InputStatus,
 }
 
 impl SettingsApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Result<Self> {
         let service = ServiceCli::default();
         let active = service.is_active().unwrap_or(false);
+        let input_status = input_check::probe().unwrap_or(InputStatus::NoKeyboard);
         Ok(Self {
             service,
             active,
@@ -31,6 +38,7 @@ impl SettingsApp {
             on: load_texture(&cc.egui_ctx, "noot-on", TEXTURE_ON)?,
             off: load_texture(&cc.egui_ctx, "noot-off", TEXTURE_OFF)?,
             error: None,
+            input_status,
         })
     }
 
@@ -40,28 +48,50 @@ impl SettingsApp {
                 self.active = active;
                 self.error = None;
             }
-            Err(error) => self.error = Some(format!("{error:#}")),
+            Err(error) => {
+                let message = format!("{error:#}");
+                eprintln!("{message}");
+                self.error = Some(message);
+            }
         }
     }
 
     fn toggle(&mut self) {
+        let daemon = std::env::current_exe().map(|exe| exe.with_file_name("nootd"));
+        if let Ok(daemon) = daemon {
+            if let Err(error) = self.service.install_unit(&daemon) {
+                let message = format!("{error:#}");
+                eprintln!("{message}");
+                self.error = Some(message);
+                return;
+            }
+        }
         match self.service.toggle() {
             Ok(enabled) => {
                 self.active = enabled;
                 self.error = None;
             }
-            Err(error) => self.error = Some(format!("{error:#}")),
+            Err(error) => {
+                let message = format!("{error:#}");
+                eprintln!("{message}");
+                self.error = Some(message);
+            }
         }
+        self.input_status = input_check::probe().unwrap_or(self.input_status);
     }
 
-    fn hint(&self) -> String {
-        if let Some(error) = &self.error {
-            return error.clone();
+    fn banner(&self) -> Option<(&'static str, Color32, Color32)> {
+        if self.error.is_some() {
+            return Some(("Échec systemctl — lancer noot-settings --check en terminal", ERROR_BAND, ERROR_TEXT));
         }
-        if self.active {
-            return String::from("Noot actif — clic pour désactiver, clic droit pour fermer");
+        if self.input_status == InputStatus::Blocked {
+            return Some((
+                "Clavier illisible — sudo usermod -aG input $USER, puis se reconnecter",
+                WARNING_BAND,
+                WARNING_TEXT,
+            ));
         }
-        String::from("Noot inactif — clic pour activer, clic droit pour fermer")
+        None
     }
 }
 
@@ -71,6 +101,31 @@ fn load_texture(ctx: &egui::Context, name: &str, bytes: &[u8]) -> Result<Texture
     let height = usize::try_from(image.height()).map_err(|_| anyhow!("hauteur d'image invalide"))?;
     let pixels = ColorImage::from_rgba_unmultiplied([width, height], image.as_raw());
     Ok(ctx.load_texture(name, pixels, TextureOptions::LINEAR))
+}
+
+fn paint_marquee(ui: &egui::Ui, band: egui::Rect, text: &str, color: Color32) {
+    let font = egui::FontId::proportional(12.0);
+    let galley = ui.painter().layout_no_wrap(text.to_owned(), font, color);
+    let text_width = galley.size().x;
+    let top = band.center().y - galley.size().y / 2.0;
+    let painter = ui.painter().with_clip_rect(band);
+
+    if text_width <= band.width() {
+        painter.galley(egui::pos2(band.center().x - text_width / 2.0, top), galley, color);
+        return;
+    }
+
+    let gap = 48.0;
+    let step = text_width + gap;
+    let period = f64::from(step);
+    #[expect(clippy::cast_possible_truncation, reason = "décalage de défilement exprimé en pixels")]
+    let offset = (ui.input(|input| input.time) * 36.0 % period) as f32;
+    let mut x = band.left() - offset;
+    while x < band.right() {
+        painter.galley(egui::pos2(x, top), galley.clone(), color);
+        x += step;
+    }
+    ui.ctx().request_repaint_after(Duration::from_millis(33));
 }
 
 impl eframe::App for SettingsApp {
@@ -94,7 +149,6 @@ impl eframe::App for SettingsApp {
         ui.painter().image(texture.id(), image_rect, uv, Color32::WHITE);
 
         let response = ui.interact(bounds, ui.scope_id().with("noot-toggle"), egui::Sense::click_and_drag());
-        let response = response.on_hover_text(self.hint());
 
         if response.clicked() {
             self.toggle();
@@ -106,9 +160,10 @@ impl eframe::App for SettingsApp {
         if response.secondary_clicked() {
             ui.ctx().send_viewport_cmd(ViewportCommand::Close);
         }
-        if self.error.is_some() {
-            ui.painter()
-                .rect_stroke(bounds, 0.0, egui::Stroke::new(2.0, ERROR), egui::StrokeKind::Inside);
+        if let Some((message, band_color, text_color)) = self.banner() {
+            let band = egui::Rect::from_min_max(egui::pos2(bounds.left(), bounds.bottom() - BAND_HEIGHT), bounds.right_bottom());
+            ui.painter().rect_filled(band, 0.0, band_color);
+            paint_marquee(ui, band, message, text_color);
         }
     }
 }
