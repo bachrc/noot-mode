@@ -1,0 +1,10 @@
+[Unit]
+Description=Noot mode (service factice)
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/sleep infinity
+Restart=no
+
+[Install]
+WantedBy=default.target

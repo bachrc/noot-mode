@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Noot mode
+Comment=Activer ou désactiver le noot mode
+Exec=@EXEC@
+Icon=@ICON@
+Terminal=false
+Categories=Settings;
