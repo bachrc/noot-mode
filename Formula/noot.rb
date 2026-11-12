@@ -1,7 +1,7 @@
 class Noot < Formula
   desc "Honks on every keypress"
-  homepage "https://github.com/bachrc/nootnoot"
-  head "https://github.com/bachrc/nootnoot.git", branch: "main"
+  homepage "https://github.com/bachrc/noot-mode"
+  head "https://github.com/bachrc/noot-mode.git", branch: "main"
 
   depends_on :linux
   depends_on "rust" => :build

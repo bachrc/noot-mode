@@ -6,13 +6,13 @@ Noots at each key type. For Linux only.
 
 Use homebrew:
 
-    brew tap bachrc/noot https://github.com/bachrc/nootnoot
+    brew tap bachrc/noot https://github.com/bachrc/noot-mode
     brew install --HEAD bachrc/noot/noot
 
 Without it, clone the repo and run the installer:
 
-    git clone https://github.com/bachrc/nootnoot
-    cd nootnoot
+    git clone https://github.com/bachrc/noot-mode
+    cd noot-mode
     ./install.sh
 
 Both put the binaries in place. Then open Noot mode from your app launcher.
